@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>HP Bar with Crits + Random Damage</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: #222;
+            color: #fff;
+            gap: 20px;
+        }
+
+        #enemyIcon {
+            font-size: 4rem; /* big and bold */
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        #enemyIcon.flash{
+            filter: brightness(200%);
+            transition: filter 0.1s ease;
+        }
+
+        #enemyIcon.defeated{
+            filter: grayscale(100%) brightness(50%);
+        }
+
+        #hp {
+            font-size: 1.5rem;
+        }
+
+        /* HP bar container */
+        #hpBar {
+            width: 300px;
+            height: 30px;
+            background: #444;
+            border: 2px solid #000;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative; /* lets children use absolute positioning */
+        }
+
+        /* Fill inside HP bar */
+        #hpFill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(to right, #e63946, #ff4);
+            transition: width 0.2s ease-out;
+        }
+
+        /* Skill button */
+        button {
+            width: 80px;
+            height: 80px;
+            font-size: 2rem;   /* emoji size */
+            border: none;
+            border-radius: 50%;
+            background: #4caf50;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s ease;
+        }
+
+        button:disabled {
+            background: gray;
+            cursor: not-allowed;
+        }
+
+        /* Cooldown bar */
+        #cooldownBar {
+            width: 200px;
+            height: 20px;
+            background: #444;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        #cooldownFill {
+            height: 100%;
+            width: 0%;
+            background: #76c7c0;
+            transition: width 0.1s linear;
+        }
+
+        /* Crit message now inside bar */
+        #critMessage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%); /* center */
+            font-size: 1.2rem;
+            color: red;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none; /* don't block clicks */
+        }
+
+    </style>
+</head>
+<body>
+<div id="enemyIcon">👾</div>
+<div id="hp">HP: 100</div>
+<div id="hpBar">
+    <div id="hpFill"></div>
+    <div id="critMessage"></div>
+</div>
+
+
+<button id="hitBtn">💥</button>
+
+<div id="cooldownBar"><div id="cooldownFill"></div></div>
+
+<script>
+    let defeated = false; // track enemy state
+    let hp = 100;
+    const maxHp = 150;
+    const hpDisplay = document.getElementById("hp");
+    const hpFill = document.getElementById("hpFill");
+    const hitBtn = document.getElementById("hitBtn");
+    const cooldownFill = document.getElementById("cooldownFill");
+    const critMessage = document.getElementById("critMessage");
+
+    const cooldown = 2000; // 2 seconds
+    let onCooldown = false;
+
+    // audio files
+    const hitSound = new Audio("sword-cut.mp3");
+    const bgm = new Audio("short-game-music-loop.mp3");
+    bgm.loop = true; // repeat BGM forever
+    bgm.volume = 0.3;
+    const victorySound = new Audio("rumble.mp3"); // enemy defeat sound
+    const cooldownSound = new Audio("quick-double-swish.mp3");
+
+    /* trigger BGM playback by clicking attack */
+    function startBgm() {
+        if (bgm.paused) {
+            bgm.play();
+        }
+    }
+
+    hitBtn.addEventListener("click", () => {
+        startBgm();
+        takeDamage();
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.code === "Space" || event.code === "Enter") {
+            startBgm();
+            if (!onCooldown) {
+                takeDamage();
+            }
+        }
+    });
+
+
+    // Helper: Random damage between min & max
+    function getRandomDamage(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    // Helper: Add crit chance
+    function getAttackDamage(base, critChance = 0.2, critMultiplier = 2) {
+        if (Math.random() < critChance) {
+            showCrit();
+            /* play SFX twice on critical hit */
+            hitSound.currentTime = 0;
+            hitSound.play();
+            setTimeout(() => {
+                hitSound.currentTime = 0;
+                hitSound.play();
+            }, 100); //slight delay between SFX calls
+            return base * critMultiplier;
+        }
+        return base;
+    }
+
+    function flashEnemy() {
+        const enemyIcon = document.getElementById("enemyIcon");
+        enemyIcon.classList.add("flash");
+        setTimeout(() => {
+            enemyIcon.classList.remove("flash");
+        }, 100);
+    }
+
+    // Show crit message briefly
+    function showCrit() {
+        critMessage.textContent = "CRITICAL HIT!";
+        critMessage.style.opacity = 1;
+        setTimeout(() => {
+            critMessage.style.opacity = 0;
+        }, 500);
+    }
+
+    function updateHpDisplay() {
+        hpDisplay.textContent = `HP: ${hp}`;
+        const percent = (hp / maxHp) * 100;
+        hpFill.style.width = `${percent}%`;
+    }
+
+    function takeDamage() {
+        if (onCooldown) return;
+
+        let baseDamage = getRandomDamage(7, 12);
+        let finalDamage = getAttackDamage(baseDamage);
+
+        hp = Math.max(0, hp - finalDamage);
+        updateHpDisplay();
+        flashEnemy();
+// Only play sound here if it wasn't a crit
+        if (finalDamage === baseDamage) {
+            hitSound.currentTime = 0;
+            hitSound.play();
+        }
+        checkDefeat();
+
+
+        // start cooldown
+        onCooldown = true;
+        hitBtn.disabled = true;
+
+        let startTime = Date.now();
+
+        function updateCooldown() {
+            let elapsed = Date.now() - startTime;
+            let progress = Math.min(elapsed / cooldown, 1);
+            cooldownFill.style.width = `${progress * 100}%`;
+
+            if (progress < 1) {
+                requestAnimationFrame(updateCooldown);
+            } else {
+                onCooldown = false;
+                hitBtn.disabled = false;
+                cooldownFill.style.width = "0%"; // reset bar
+                cooldownSound.play(); // 🔔 play sound when skill is ready
+            }
+        }
+
+        updateCooldown();
+    }
+
+    // Button click
+    hitBtn.addEventListener("click", () => takeDamage());
+
+    // Keyboard press (spacebar or Enter)
+    document.addEventListener("keydown", (event) => {
+        if (event.code === "Space" || event.code === "Enter") {
+            event.preventDefault();
+            if (!onCooldown) {
+                takeDamage();
+            }
+        }
+    });
+
+    setInterval(() => {
+        if (hp < maxHp && !defeated) { // only regen if not defeated
+            hp++;
+            updateHpDisplay();
+        }
+    }, 500);
+
+    // initialize display
+    updateHpDisplay();
+
+    function checkDefeat() {
+        if (hp <= 0) {
+            hp = 0;
+            updateHpDisplay();
+            hitBtn.disabled = true;
+            critMessage.textContent = "YOU WIN!";
+            critMessage.style.opacity = 1;
+            defeated = true; // stop regen
+            hpFill.style.background = "#555"; // gray out bar
+            document.getElementById("enemyIcon").classList.add("defeated");
+            victorySound.play(); // 🎉 play win sound
+            bgm.pause();
+            bgm.currentTime = 0; // rewind to start
+
+        }
+    }
+    </script>
+</body>
+</html>
